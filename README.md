@@ -6,6 +6,10 @@ Non-production minimal redis server supporting a small subset of redis commands
 npm install redis-dev-server
 node . [ -a address ] [ -p port ] [ -i save_interval | -n ] [ -e expire_interval ] [ persist_filename ]
 ```
+eg:
+```
+node . -p 1234 myfile.db --save-interval 5
+```
 
 ## Supported commands
 - `INFO` - responds with `+OK`

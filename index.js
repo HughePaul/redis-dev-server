@@ -198,11 +198,7 @@ class RedisConnection {
     }
 
     error(line) {
-        console.error(
-            moment().toISOString(),
-            this.name,
-            'Error:',
-            line);
+        this.log('Error:', line);
         this.write('-' + line + '\r\n');
     }
 
