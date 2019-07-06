@@ -13,7 +13,7 @@ const NUMBER = 58;
 
 const string = val => typeof val === 'string' ? val : val.toString ? val.toString() : String(val);
 const number = val => typeof val === 'number' ? val : parseInt(val, 10);
-const summary = val => val.length > 20 ? val.slice(0, 20).toString() + '...' : val.toString();
+const summary = (max = 32) => val => val.length > max ? val.slice(0, max - 1).toString() + '…' : val.toString();
 const pattern = pattern => {
     pattern = pattern
         .replace(/([\\.(){}^$])/g, '\\$1')
@@ -168,6 +168,7 @@ class RedisConnection {
         let method = 'run' + command.slice(0, 1).toUpperCase() + command.slice(1).toLowerCase();
         if (!this[method]) return this.error('UNKNOWN COMMAND ' + command);
 
+        this.log(command.toUpperCase(), ...(args.map(summary(50))));
         this[method].apply(this, args);
     }
 
@@ -231,8 +232,8 @@ class RedisConnection {
     }
 
     runFlushall() {
-        this.log('FllushAll');
         this.data.clear();
+        this.data.changed = true;
         this.respond('OK');
     }
 
@@ -241,16 +242,14 @@ class RedisConnection {
     }
 
     runDbsize() {
-        this.log('DBSize');
         this.respond(this.data.length);
     }
 
     runClient(command, ...args) {
-        command = summary(command).toUpperCase();
+        command = string(command).toUpperCase();
         switch (command) {
         case 'SETNAME':
             this.name = string(args.shift());
-            this.log('Client setname', this.name);
             return this.respond('OK');
         case 'GETNAME':
             return this.respond(this.name);
@@ -265,7 +264,6 @@ class RedisConnection {
 
     runExists(key) {
         key = string(key);
-        this.log('Exists', key);
         let exists = this.data.has(key);
         if (exists) return this.respond(1);
         this.respond(0);
@@ -273,7 +271,6 @@ class RedisConnection {
 
     runType(key) {
         key = string(key);
-        this.log('Type', key);
         let data = this.data.get(key);
         if (!data) return this.respond('');
         this.respond('string');
@@ -282,14 +279,12 @@ class RedisConnection {
 
     runGet(key) {
         key = string(key);
-        this.log('Get', key);
         let data = this.data.get(key);
         if (!data) return this.respond(null);
         this.respond(data.v);
     }
 
     runMget(...args) {
-        this.log('MGet', ...(args.map(string)));
         let results = args.map(key => {
             let data = this.data.get(string(key));
             return data ? data.v : null;
@@ -298,21 +293,18 @@ class RedisConnection {
     }
 
     runSetex(key, ttl, value) {
-        key = string(key);
         this.runSet(key, value, 'EX', ttl);
     }
 
     runPsetex(key, ttl, value) {
-        key = string(key);
         this.runSet(key, value, 'PX', ttl);
     }
 
     runSet(key, value, ...args) {
         key = string(key);
-        this.log('Set', key, summary(value), ...(args.map(string)));
         let data = { v: value, e: null };
         while (args.length) {
-            let arg = summary(args.shift()).toUpperCase();
+            let arg = string(args.shift()).toUpperCase();
             if (arg === 'EX') data.e = Date.now() + number(args.shift()) * 1000;
             else if (arg === 'PX') data.e = Date.now() + number(args.shift());
             else if (arg === 'NX') if (this.data.has(key)) return this.respond(null);
@@ -325,7 +317,6 @@ class RedisConnection {
     }
 
     runMset(...args) {
-        this.log('MSet', ...(args.map(summary)));
         while (args.length) {
             let key = string(args.shift());
             let value = args.shift();
@@ -337,7 +328,6 @@ class RedisConnection {
     }
 
     runMsetnx(...args) {
-        this.log('MSetNX', ...(args.map(summary)));
         let set = [];
         while (args.length) {
             let key = string(args.shift());
@@ -356,7 +346,6 @@ class RedisConnection {
 
     runDel(...keys) {
         keys = keys.map(key => string(key));
-        this.log('Del', keys);
         keys = keys.filter(key => this.data.has(key));
         keys.forEach(key => this.data.delete(key));
         this.data.changed = true;
@@ -365,7 +354,6 @@ class RedisConnection {
 
     runKeys(match) {
         if (!match) return this.error('KEYS requires pattern');
-        this.log('Keys', string(match));
         match = pattern(string(match));
         let keys = Array.from(this.data.keys());
         keys = keys.filter(key => match.test(key));
@@ -375,11 +363,10 @@ class RedisConnection {
     runScan(cursor, ...args) {
         if (!cursor) return this.error('SCAN requires cursor');
         cursor = number(cursor);
-        this.log('Scan', cursor, ...(args.map(summary)));
         let match = null;
         let count = 10;
         while (args.length) {
-            let arg = summary(args.shift()).toUpperCase();
+            let arg = string(args.shift()).toUpperCase();
             if (arg === 'COUNT') count = number(args.shift());
             else if (arg === 'MATCH') match = pattern(string(args.shift()));
             else return this.error('Unknown SCAN argument: ' + arg);
@@ -396,7 +383,6 @@ class RedisConnection {
     runExpireat(key, stamp) {
         key = string(key);
         stamp = number(stamp);
-        this.log('ExpireAt', key, stamp);
         let data = this.data.get(key);
         if (!data) this.respond(0);
         data.e = stamp;
@@ -420,7 +406,6 @@ class RedisConnection {
 
     runTtl(key) {
         key = string(key);
-        this.log('TTL', key);
         let data = this.data.get(key);
         if (!data) return this.respond(-2);
         if (!data.e) return this.respond(-1);
@@ -429,7 +414,6 @@ class RedisConnection {
 
     runPttl(key) {
         key = string(key);
-        this.log('PTTL', key);
         let data = this.data.get(key);
         if (!data) return this.respond(-2);
         if (!data.e) return this.respond(-1);
@@ -437,7 +421,6 @@ class RedisConnection {
     }
 
     runDumpall() {
-        this.log('Dump All');
         let now = Date.now();
         this.respond(['FLUSHDB']);
         this.data.forEach((data, key) => {
@@ -451,7 +434,6 @@ class RedisConnection {
     }
 
     runQuit() {
-        this.log('Quit');
         if (this.inStream && this.inStream.end) this.inStream.end();
         else if (this.inStream && this.inStream.close) this.inStream.close();
         else if (this.inStream && this.inStream.destroy) this.inStream.destroy();
