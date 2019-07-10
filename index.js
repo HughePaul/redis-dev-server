@@ -10,8 +10,9 @@ const ARRAY = 42;
 const SIMPLE = 43;
 const ERROR = 45;
 const NUMBER = 58;
+const COMMAND = -1;
 
-const string = val => typeof val === 'string' ? val : val.toString ? val.toString() : String(val);
+const string = val => typeof val === 'string' ? val : val && val.toString ? val.toString() : String(val);
 const number = val => typeof val === 'number' ? val : parseInt(val, 10);
 const summary = (max = 32) => val => val.length > max ? val.slice(0, max - 1).toString() + '…' : val.toString();
 const pattern = pattern => {
@@ -71,12 +72,13 @@ class RedisConnection {
                     this.type = null;
                     continue;
                 }
-                if (![ARRAY, BUFFER, NUMBER, SIMPLE, ERROR].includes(this.type)) {
-                    throw new Error('Unknown type: ' + this.type);
-                }
                 this.line = null;
                 this.length = null;
-                p++;
+                if ([ARRAY, BUFFER, NUMBER, SIMPLE, ERROR].includes(this.type)) {
+                    p++;
+                } else {
+                    this.type = COMMAND;
+                }
                 continue;
             }
 
@@ -145,6 +147,10 @@ class RedisConnection {
         case SIMPLE:
         case ERROR:
             this.push(string(line));
+            break;
+        case COMMAND:
+            if (this.stack.length) return this.error('Bad COMMAND at position');
+            this.run(string(line).split(/\s+/));
             break;
         default:
             this.push(line);
