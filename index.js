@@ -107,7 +107,7 @@ class RedisConnection {
             p = lineEnd + 2;
 
             if (this.type === BUFFER) {
-                this.length = parseInt(this.line.toString(), 10);
+                this.length = number(this.line);
                 if (this.length === -1) {
                     this.item(null, null);
                     this.type = null;
@@ -135,16 +135,16 @@ class RedisConnection {
         case ARRAY:
             {
                 let array = [];
-                array.size = parseInt(line.toString(), 10);
+                array.size = number(line);
                 this.stack.push(array);
             }
             break;
         case NUMBER:
-            this.push(parseInt(line.toString(), 10));
+            this.push(number(line));
             break;
         case SIMPLE:
         case ERROR:
-            this.push(line.toString());
+            this.push(string(line));
             break;
         default:
             this.push(line);
@@ -163,8 +163,7 @@ class RedisConnection {
 
     run(args) {
         if (!Array.isArray(args)) args = [ args ];
-        let command = args.shift();
-        if (command instanceof Buffer) command = command.toString();
+        let command = string(args.shift());
         let method = 'run' + command.slice(0, 1).toUpperCase() + command.slice(1).toLowerCase();
         if (!this[method]) return this.error('UNKNOWN COMMAND ' + command);
 
